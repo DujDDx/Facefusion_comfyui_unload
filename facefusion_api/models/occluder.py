@@ -15,11 +15,18 @@ from .constants import MODEL_URLS, MODEL_CONFIGS
 
 class FaceOccluder:
     """Face occluder (xseg) for detecting occluded regions."""
-    
+
     def __init__(self, model_name: str = 'xseg_1'):
         self.model_name = model_name
         self.model_session = None
         self.model_config = MODEL_CONFIGS.get(model_name, {'size': (256, 256), 'type': 'occluder'})
+
+    def unload(self):
+        """Unload model from memory (GPU/CPU) to free resources."""
+        if self.model_session is not None:
+            del self.model_session
+            self.model_session = None
+            print(f"[FaceOccluder] Unloaded model: {self.model_name}")
     
     def initialize(self) -> bool:
         """Initialize the occluder model."""
@@ -95,6 +102,19 @@ def get_face_occluder(model_name: str = 'xseg_1') -> Optional[FaceOccluder]:
     if model_name not in _occluder_instances:
         _occluder_instances[model_name] = FaceOccluder(model_name)
     return _occluder_instances[model_name]
+
+
+def unload_face_occluder(model_name: str = None):
+    """Unload face occluder instance(s) to free GPU/CPU memory."""
+    global _occluder_instances
+    if model_name is not None:
+        if model_name in _occluder_instances:
+            _occluder_instances[model_name].unload()
+            del _occluder_instances[model_name]
+    else:
+        for name, instance in _occluder_instances.items():
+            instance.unload()
+        _occluder_instances.clear()
 
 
 

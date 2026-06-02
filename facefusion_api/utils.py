@@ -254,16 +254,42 @@ def get_model_path(model_name: str) -> str:
 def ensure_model_exists(model_name: str, download_url: Optional[str] = None, expected_hash: Optional[str] = None) -> bool:
     """Ensure a model file exists, downloading if necessary."""
     model_path = get_model_path(model_name)
-    
+
     # Check if model already exists
     if os.path.exists(model_path):
         if expected_hash is None or verify_file_hash(model_path, expected_hash):
             return True
-    
+
     # Download if URL provided
     if download_url:
         print(f"Model {model_name} not found, downloading...")
         return download_file(download_url, model_path, expected_hash)
-    
+
     return False
+
+
+def unload_all_models():
+    """Unload all loaded models (swapper, occluder, parser) to free GPU/CPU memory."""
+    from .models import unload_local_swapper, unload_face_occluder, unload_face_parser
+    from .detection.detector import unload_face_detector
+
+    unload_local_swapper()
+    unload_face_occluder()
+    unload_face_parser()
+    unload_face_detector()
+
+    # Force garbage collection to ensure memory is freed
+    import gc
+    gc.collect()
+
+    # Try to clear CUDA cache if available
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            print("[Unload] CUDA cache cleared")
+    except Exception:
+        pass
+
+    print("[Unload] All models unloaded, memory freed")
 

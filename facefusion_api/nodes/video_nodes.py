@@ -57,6 +57,14 @@ class SwapFaceVideo:
 						'max': 32
 					}
 				)
+,
+				'unload_models':
+				(
+					'BOOLEAN',
+					{
+						'default': False
+					}
+				)
 			}
 		}
 
@@ -65,7 +73,7 @@ class SwapFaceVideo:
 	CATEGORY = 'FaceFusion API'
 
 	@staticmethod
-	def process(source_images : Tensor, target_video : VideoFromComponents, api_token : str, face_swapper_model : FaceSwapperModel, face_detector_model: str, max_workers : int) -> Tuple[VideoFromComponents]:
+	def process(source_images : Tensor, target_video : VideoFromComponents, api_token : str, face_swapper_model : FaceSwapperModel, face_detector_model: str, max_workers : int, unload_models : bool) -> Tuple[VideoFromComponents]:
 		try:
 			# Handle multiple source images by taking the first one
 			if source_images.dim() == 4 and source_images.shape[0] > 1:
@@ -160,8 +168,14 @@ class SwapFaceVideo:
 			)
 
 			output_video = VideoFromComponents(output_video_components)
+
+			# Unload models if requested
+			if unload_models:
+				from ..utils import unload_all_models
+				unload_all_models()
+
 			return (output_video,)
-				
+
 		except RuntimeError as e:
 			# Re-raise RuntimeError with clear message (don't return original video)
 			print(f"[SwapFaceVideo] Fatal error: {e}")
@@ -347,6 +361,14 @@ class AdvancedSwapFaceVideo:
 						'max': 32
 					}
 				)
+,
+				'unload_models':
+				(
+					'BOOLEAN',
+					{
+						'default': False
+					}
+				)
 			},
 			'optional':
 			{
@@ -391,6 +413,7 @@ class AdvancedSwapFaceVideo:
 		face_mask_regions: str = 'skin,nose,mouth,upper-lip,lower-lip',
 		face_mask_padding: str = '0,0,0,0',
 		max_workers: int = 16,
+		unload_models: bool = False,
 		reference_image: Optional[Tensor] = None,
 		reference_face_distance: float = 0.6
 	) -> Tuple[VideoFromComponents]:
@@ -523,8 +546,14 @@ class AdvancedSwapFaceVideo:
 			)
 
 			output_video = VideoFromComponents(output_video_components)
+
+			# Unload models if requested
+			if unload_models:
+				from ..utils import unload_all_models
+				unload_all_models()
+
 			return (output_video,)
-				
+
 		except RuntimeError as e:
 			# Re-raise RuntimeError with clear message (don't return original video)
 			print(f"[AdvancedSwapFaceVideo] Fatal error: {e}")

@@ -15,11 +15,18 @@ from .constants import MODEL_URLS, MODEL_CONFIGS, FACE_MASK_REGION_SET
 
 class FaceParser:
     """Face parser (bisenet) for segmenting face regions."""
-    
+
     def __init__(self, model_name: str = 'bisenet_resnet_34'):
         self.model_name = model_name
         self.model_session = None
         self.model_config = MODEL_CONFIGS.get(model_name, {'size': (512, 512), 'type': 'parser'})
+
+    def unload(self):
+        """Unload model from memory (GPU/CPU) to free resources."""
+        if self.model_session is not None:
+            del self.model_session
+            self.model_session = None
+            print(f"[FaceParser] Unloaded model: {self.model_name}")
     
     def initialize(self) -> bool:
         """Initialize the parser model."""
@@ -131,6 +138,19 @@ def get_face_parser(model_name: str = 'bisenet_resnet_34') -> Optional[FaceParse
     if model_name not in _parser_instances:
         _parser_instances[model_name] = FaceParser(model_name)
     return _parser_instances[model_name]
+
+
+def unload_face_parser(model_name: str = None):
+    """Unload face parser instance(s) to free GPU/CPU memory."""
+    global _parser_instances
+    if model_name is not None:
+        if model_name in _parser_instances:
+            _parser_instances[model_name].unload()
+            del _parser_instances[model_name]
+    else:
+        for name, instance in _parser_instances.items():
+            instance.unload()
+        _parser_instances.clear()
 
 
 

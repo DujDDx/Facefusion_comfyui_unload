@@ -19,7 +19,7 @@ from ..utils import (
 
 class FaceDetector:
     """Face detector using ONNX models - simplified to match facefusion."""
-    
+
     MODEL_URLS = {
         'scrfd_2.5g': 'https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/scrfd_2.5g.onnx',
         'retinaface_10g': 'https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/retinaface_10g.onnx',
@@ -27,13 +27,25 @@ class FaceDetector:
         'yunet_2023_mar': 'https://github.com/facefusion/facefusion-assets/releases/download/models-3.4.0/yunet_2023_mar.onnx',
         'arcface_w600k_r50': 'https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/arcface_w600k_r50.onnx',
     }
-    
+
     def __init__(self, detector_model: str = 'scrfd_2.5g', recognition_model: str = 'arcface_w600k_r50'):
         self.detector_model_name = detector_model
         self.recognition_model_name = recognition_model
         self.detector_session = None
         self.recognition_session = None
         self.detector_size = (640, 640)
+
+    def unload(self):
+        """Unload model from memory (GPU/CPU) to free resources."""
+        if self.detector_session is not None:
+            del self.detector_session
+            self.detector_session = None
+            print(f"[FaceDetector] Unloaded detector model: {self.detector_model_name}")
+
+        if self.recognition_session is not None:
+            del self.recognition_session
+            self.recognition_session = None
+            print(f"[FaceDetector] Unloaded recognition model: {self.recognition_model_name}")
         
     def initialize(self) -> bool:
         """Initialize the detector and recognition models."""
@@ -526,15 +538,37 @@ def select_faces(
 ) -> List[Face]:
     """Select faces from target image based on mode."""
     target_faces = detect_faces(target_image, score_threshold)
-    
+
     if mode == 'many':
         return target_faces
-    
+
     if mode == 'one':
         selected = select_face_by_position(target_faces, position)
         return [selected] if selected else []
-    
+
     if mode == 'reference' and reference_face:
         return find_matching_faces(reference_face, target_faces, distance_threshold)
-    
+
     return []
+
+
+def unload_face_detector(detector_model: str = None):
+    """Unload face detector instance(s) to free GPU/CPU memory."""
+    global _detector_instances
+    if detector_model is not None:
+        # Map user-friendly names to actual model names
+        model_mapping = {
+            'scrfd': 'scrfd_2.5g',
+            'retinaface': 'retinaface_10g',
+            'yolo_face': 'yoloface_8n',
+            'yunet': 'yunet_2023_mar',
+            'many': 'scrfd_2.5g'
+        }
+        actual_model = model_mapping.get(detector_model, detector_model)
+        if actual_model in _detector_instances:
+            _detector_instances[actual_model].unload()
+            del _detector_instances[actual_model]
+    else:
+        for name, instance in _detector_instances.items():
+            instance.unload()
+        _detector_instances.clear()

@@ -9,10 +9,13 @@ from .models import (
     WARP_TEMPLATES,
     LocalFaceSwapper,
     get_local_swapper,
+    unload_local_swapper,
     FaceOccluder,
     get_face_occluder,
+    unload_face_occluder,
     FaceParser,
     get_face_parser,
+    unload_face_parser,
 )
 from .swap_local import swap_faces_local
 
@@ -22,9 +25,12 @@ __all__ = [
     'WARP_TEMPLATES',
     'LocalFaceSwapper',
     'get_local_swapper',
+    'unload_local_swapper',
     'FaceOccluder',
     'get_face_occluder',
+    'unload_face_occluder',
     'FaceParser',
     'get_face_parser',
+    'unload_face_parser',
     'swap_faces_local',
 ]

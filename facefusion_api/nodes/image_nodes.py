@@ -46,6 +46,13 @@ class SwapFaceImage:
 					{
 						'default': 'scrfd'
 					}
+				),
+				'unload_models':
+				(
+					'BOOLEAN',
+					{
+						'default': False
+					}
 				)
 			}
 		}
@@ -55,14 +62,14 @@ class SwapFaceImage:
 	CATEGORY = 'FaceFusion API'
 
 	@staticmethod
-	def process(source_images : Tensor, target_image : Tensor, api_token : str, face_swapper_model : FaceSwapperModel, face_detector_model: str) -> Tuple[Tensor]:
+	def process(source_images : Tensor, target_image : Tensor, api_token : str, face_swapper_model : FaceSwapperModel, face_detector_model: str, unload_models: bool) -> Tuple[Tensor]:
 		# Smart batch processing - handle any input format
 		# Use first source image (or average multiple sources in future)
 		if source_images.dim() == 4 and source_images.shape[0] > 1:
 			source_image = source_images[0:1]
 		else:
 			source_image = source_images
-		
+
 		# Check if target is a batch
 		if target_image.dim() == 4 and target_image.shape[0] > 1:
 			# Process each target image in the batch
@@ -77,7 +84,12 @@ class SwapFaceImage:
 		else:
 			# Single image processing
 			output_tensor = SwapFaceImage.swap_face(source_image, target_image, api_token, face_swapper_model, '512x512', 0.3, face_detector_model=face_detector_model)
-		
+
+		# Unload models if requested
+		if unload_models:
+			from ..utils import unload_all_models
+			unload_all_models()
+
 		return (output_tensor,)
 
 	@staticmethod
@@ -325,7 +337,14 @@ class AdvancedSwapFaceImage:
 						'default': '0,0,0,0',
 						'multiline': False
 					}
-				)
+				),
+			'unload_models':
+			(
+				'BOOLEAN',
+				{
+					'default': False
+				}
+			)
 			},
 			'optional':
 			{
@@ -369,9 +388,10 @@ class AdvancedSwapFaceImage:
 		face_mask_areas: str = 'upper-face,lower-face,mouth',
 		face_mask_regions: str = 'skin,nose,mouth,upper-lip,lower-lip',
 		face_mask_padding: str = '0,0,0,0',
-		reference_image: Optional[Tensor] = None,
-		reference_face_distance: float = 0.6
-	) -> Tuple[Tensor]:
+			unload_models: bool = False,
+			reference_image: Optional[Tensor] = None,
+			reference_face_distance: float = 0.6
+		) -> Tuple[Tensor]:
 		"""Process face swapping with advanced selection - smart batch handling."""
 		# Build face_mask_types list based on boolean options
 		face_mask_types = []
@@ -455,5 +475,10 @@ class AdvancedSwapFaceImage:
 				mask_regions,
 				padding
 			)
-		
+
+		# Unload models if requested
+		if unload_models:
+			from ..utils import unload_all_models
+			unload_all_models()
+
 		return (output_tensor,)

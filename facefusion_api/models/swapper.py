@@ -21,13 +21,28 @@ if TYPE_CHECKING:
 
 class LocalFaceSwapper:
     """Local face swapping using ONNX models."""
-    
+
     def __init__(self, model_name: str = 'hyperswap_1c_256'):
         self.model_name = model_name
         self.model_session = None
         self.embedding_converter_session = None
         self.model_initializer = None
         self.model_config = MODEL_CONFIGS.get(model_name, MODEL_CONFIGS['hyperswap_1c_256'])
+        self.model_initializer = None
+
+    def unload(self):
+        """Unload model from memory (GPU/CPU) to free resources."""
+        if self.model_session is not None:
+            # Delete the session to release memory
+            del self.model_session
+            self.model_session = None
+            print(f"[LocalFaceSwapper] Unloaded model: {self.model_name}")
+
+        if self.embedding_converter_session is not None:
+            del self.embedding_converter_session
+            self.embedding_converter_session = None
+            print(f"[LocalFaceSwapper] Unloaded embedding converter")
+
         self.model_initializer = None
         
     def initialize(self) -> bool:
@@ -587,4 +602,12 @@ def get_local_swapper(model_name: str = 'hyperswap_1c_256') -> LocalFaceSwapper:
     if _swapper_instance is None or _swapper_instance.model_name != model_name:
         _swapper_instance = LocalFaceSwapper(model_name)
     return _swapper_instance
+
+
+def unload_local_swapper():
+    """Unload the global swapper instance to free GPU/CPU memory."""
+    global _swapper_instance
+    if _swapper_instance is not None:
+        _swapper_instance.unload()
+        _swapper_instance = None
 
