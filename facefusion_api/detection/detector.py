@@ -38,25 +38,54 @@ class FaceDetector:
     def unload(self):
         """Unload model from memory (GPU/CPU) to free resources."""
         if self.detector_session is not None:
+            try:
+                providers = self.detector_session.get_providers()
+                print(f"[FaceDetector] Unloading detector {self.detector_model_name} from providers: {providers}")
+            except:
+                pass
+
+            try:
+                self.detector_session.end_profiling()
+            except:
+                pass
+
             del self.detector_session
             self.detector_session = None
             print(f"[FaceDetector] Unloaded detector model: {self.detector_model_name}")
 
         if self.recognition_session is not None:
+            try:
+                providers = self.recognition_session.get_providers()
+                print(f"[FaceDetector] Unloading recognition {self.recognition_model_name} from providers: {providers}")
+            except:
+                pass
+
+            try:
+                self.recognition_session.end_profiling()
+            except:
+                pass
+
             del self.recognition_session
             self.recognition_session = None
             print(f"[FaceDetector] Unloaded recognition model: {self.recognition_model_name}")
 
-        # Force garbage collection
         import gc
         gc.collect()
+
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except:
+            pass
         
     def initialize(self) -> bool:
         """Initialize the detector and recognition models."""
         try:
             detector_path = get_model_path(f'{self.detector_model_name}.onnx')
             recognition_path = get_model_path(f'{self.recognition_model_name}.onnx')
-            
+
             if not os.path.exists(detector_path):
                 print(f"Downloading face detector model: {self.detector_model_name}")
                 if not ensure_model_exists(
@@ -64,7 +93,7 @@ class FaceDetector:
                     self.MODEL_URLS.get(self.detector_model_name)
                 ):
                     return False
-            
+
             if not os.path.exists(recognition_path):
                 print(f"Downloading face recognition model: {self.recognition_model_name}")
                 if not ensure_model_exists(
@@ -72,11 +101,32 @@ class FaceDetector:
                     self.MODEL_URLS.get(self.recognition_model_name)
                 ):
                     return False
-            
+
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            self.detector_session = ort.InferenceSession(detector_path, providers=providers)
-            self.recognition_session = ort.InferenceSession(recognition_path, providers=providers)
-            
+
+            # CUDA provider options for better memory management
+            cuda_provider_options = {
+                'device_id': 0,
+                'arena_extend_strategy': 'kNextPowerOfTwo',
+                'gpu_mem_limit': 512 * 1024 * 1024,  # 512MB limit per model
+                'do_copy_in_default_stream': True,
+            }
+            session_options = ort.SessionOptions()
+            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+            self.detector_session = ort.InferenceSession(
+                detector_path,
+                providers=providers,
+                provider_options=[cuda_provider_options, {}],
+                sess_options=session_options
+            )
+            self.recognition_session = ort.InferenceSession(
+                recognition_path,
+                providers=providers,
+                provider_options=[cuda_provider_options, {}],
+                sess_options=session_options
+            )
+
             print(f"Face detector initialized successfully")
             return True
         except Exception as e:

@@ -24,34 +24,66 @@ class FaceOccluder:
     def unload(self):
         """Unload model from memory (GPU/CPU) to free resources."""
         if self.model_session is not None:
+            try:
+                providers = self.model_session.get_providers()
+                print(f"[FaceOccluder] Unloading model {self.model_name} from providers: {providers}")
+            except:
+                pass
+
+            try:
+                self.model_session.end_profiling()
+            except:
+                pass
+
             del self.model_session
             self.model_session = None
             print(f"[FaceOccluder] Unloaded model: {self.model_name}")
 
-        # Force garbage collection
         import gc
         gc.collect()
+
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except:
+            pass
     
     def initialize(self) -> bool:
         """Initialize the occluder model."""
         try:
             model_path = get_model_path(f'{self.model_name}.onnx')
-            
+
             if not os.path.exists(model_path):
                 print(f"[FaceOccluder] Downloading model: {self.model_name}")
                 download_url = MODEL_URLS.get(self.model_name)
                 if not download_url:
                     print(f"[FaceOccluder] Error: Unknown model {self.model_name}")
                     return False
-                    
+
                 if not ensure_model_exists(f'{self.model_name}.onnx', download_url):
                     print(f"[FaceOccluder] Error: Failed to download model")
                     return False
-            
-            # Create ONNX session
+
+            # Create ONNX session with CUDA memory optimization
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            self.model_session = ort.InferenceSession(model_path, providers=providers)
-            
+            cuda_provider_options = {
+                'device_id': 0,
+                'arena_extend_strategy': 'kNextPowerOfTwo',
+                'gpu_mem_limit': 512 * 1024 * 1024,  # 512MB limit for occluder
+                'do_copy_in_default_stream': True,
+            }
+            session_options = ort.SessionOptions()
+            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+            self.model_session = ort.InferenceSession(
+                model_path,
+                providers=providers,
+                provider_options=[cuda_provider_options, {}],
+                sess_options=session_options
+            )
+
             # print(f"[FaceOccluder] Model {self.model_name} loaded, running on: {self.model_session.get_providers()[0]}")
             return True
         except Exception as e:

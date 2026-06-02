@@ -283,8 +283,10 @@ def unload_all_models():
 
     # Force multiple rounds of garbage collection to ensure memory is freed
     import gc
-    for _ in range(3):
+    for i in range(5):  # Increased to 5 rounds for thorough cleanup
         gc.collect()
+        if i < 3:
+            print(f"[Unload] Garbage collection round {i+1} completed")
 
     # Try to clear CUDA cache if available
     try:
@@ -293,6 +295,13 @@ def unload_all_models():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
             print("[Unload] CUDA cache cleared and synchronized")
+
+            # Additional CUDA memory cleanup
+            if torch.cuda.memory_allocated() > 0:
+                print(f"[Unload] CUDA memory still allocated: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+                # Force one more cleanup
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
     except Exception:
         pass
 

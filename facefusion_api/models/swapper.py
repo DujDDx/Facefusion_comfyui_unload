@@ -32,13 +32,34 @@ class LocalFaceSwapper:
 
     def unload(self):
         """Unload model from memory (GPU/CPU) to free resources."""
+        # ONNX Runtime sessions need special cleanup for GPU memory
         if self.model_session is not None:
-            # Delete the session to release memory
+            # Get provider info before cleanup
+            try:
+                providers = self.model_session.get_providers()
+                print(f"[LocalFaceSwapper] Unloading model {self.model_name} from providers: {providers}")
+            except:
+                pass
+
+            # Close session explicitly - this releases GPU memory
+            try:
+                # For CUDA provider, we need to ensure proper cleanup
+                import onnxruntime as ort
+                # Destroy the session to free GPU memory
+                self.model_session.end_profiling()  # Release any profiling resources
+            except:
+                pass
+
+            # Now delete the session
             del self.model_session
             self.model_session = None
             print(f"[LocalFaceSwapper] Unloaded model: {self.model_name}")
 
         if self.embedding_converter_session is not None:
+            try:
+                self.embedding_converter_session.end_profiling()
+            except:
+                pass
             del self.embedding_converter_session
             self.embedding_converter_session = None
             print(f"[LocalFaceSwapper] Unloaded embedding converter")
@@ -48,27 +69,54 @@ class LocalFaceSwapper:
         # Force garbage collection to ensure memory is freed
         import gc
         gc.collect()
+
+        # Clear CUDA cache if available
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except:
+            pass
         
     def initialize(self) -> bool:
         """Initialize the face swapper model and embedding converter if needed."""
         try:
             model_path = get_model_path(f'{self.model_name}.onnx')
-            
+
             if not os.path.exists(model_path):
                 print(f"[LocalFaceSwapper] Downloading model: {self.model_name}")
                 download_url = MODEL_URLS.get(self.model_name)
                 if not download_url:
                     print(f"[LocalFaceSwapper] Error: Unknown model {self.model_name}")
                     return False
-                    
+
                 if not ensure_model_exists(f'{self.model_name}.onnx', download_url):
                     print(f"[LocalFaceSwapper] Error: Failed to download model")
                     return False
-            
-            # Create ONNX session
+
+            # Create ONNX session with CUDA memory optimization options
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            self.model_session = ort.InferenceSession(model_path, providers=providers)
-            
+
+            # CUDA provider options for better memory management
+            cuda_provider_options = {
+                'device_id': 0,
+                'arena_extend_strategy': 'kNextPowerOfTwo',  # More efficient memory allocation
+                'gpu_mem_limit': 2 * 1024 * 1024 * 1024,  # 2GB limit (adjust as needed)
+                'cudnn_conv_algo_search': 'EXHAUSTIVE',  # Optimize convolution algorithms
+                'do_copy_in_default_stream': True,
+            }
+
+            session_options = ort.SessionOptions()
+            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+            self.model_session = ort.InferenceSession(
+                model_path,
+                providers=providers,
+                provider_options=[cuda_provider_options, {}],  # CUDA options, CPU options
+                sess_options=session_options
+            )
+
             # Load model_initializer for inswapper models
             model_type = self.model_config.get('type')
             if model_type == 'inswapper':
@@ -76,7 +124,7 @@ class LocalFaceSwapper:
                 model = onnx.load(model_path)
                 self.model_initializer = onnx.numpy_helper.to_array(model.graph.initializer[-1])
                 print(f"[LocalFaceSwapper] Loaded model_initializer for inswapper: shape={self.model_initializer.shape}")
-            
+
             # Load embedding converter for models that need it
             converter_name = self.model_config.get('converter')
             if converter_name:
@@ -85,12 +133,22 @@ class LocalFaceSwapper:
                     print(f"[LocalFaceSwapper] Downloading embedding converter: {converter_name}")
                     converter_url = MODEL_URLS.get(converter_name)
                     if converter_url and ensure_model_exists(f'{converter_name}.onnx', converter_url):
-                        self.embedding_converter_session = ort.InferenceSession(converter_path, providers=providers)
+                        self.embedding_converter_session = ort.InferenceSession(
+                            converter_path,
+                            providers=providers,
+                            provider_options=[cuda_provider_options, {}],
+                            sess_options=session_options
+                        )
                         print(f"[LocalFaceSwapper] Loaded embedding converter: {converter_name}")
                 else:
-                    self.embedding_converter_session = ort.InferenceSession(converter_path, providers=providers)
+                    self.embedding_converter_session = ort.InferenceSession(
+                        converter_path,
+                        providers=providers,
+                        provider_options=[cuda_provider_options, {}],
+                        sess_options=session_options
+                    )
                     print(f"[LocalFaceSwapper] Loaded embedding converter: {converter_name}")
-            
+
             # print(f"[LocalFaceSwapper] Model {self.model_name} loaded successfully")
             print(f"[LocalFaceSwapper] Running on: {self.model_session.get_providers()[0]}")
             return True
