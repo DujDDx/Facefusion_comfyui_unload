@@ -24,11 +24,12 @@ def swap_faces_local(
     face_mask_types: Optional[List[str]] = None,
     face_mask_areas: Optional[List[str]] = None,
     face_mask_regions: Optional[List[str]] = None,
-    face_mask_padding: Tuple[int, int, int, int] = (0, 0, 0, 0)
+    face_mask_padding: Tuple[int, int, int, int] = (0, 0, 0, 0),
+    device: str = 'auto'
 ) -> VisionFrame:
     """
     Swap faces locally using ONNX models.
-    
+
     Args:
         source_image: Source face image
         target_image: Target image to swap faces in
@@ -46,7 +47,8 @@ def swap_faces_local(
         face_mask_areas: List of face areas for area mask ['upper-face', 'lower-face', 'mouth']
         face_mask_regions: List of face regions for region mask ['skin', 'nose', 'mouth', etc.]
         face_mask_padding: Padding for box mask (top, right, bottom, left)
-    
+        device: Device for inference ('auto', 'cuda', 'cpu', 'cuda:0', 'cuda:1', etc.)
+
     Returns:
         Image with swapped faces
     """
@@ -54,26 +56,26 @@ def swap_faces_local(
     if face_mask_types is None:
         face_mask_types = ['box']
     # print(f"[LocalSwap] Starting local face swap with model: {model_name}")
-    
+
     # Detect faces in source and target
     source_faces = detect_faces(source_image, score_threshold, sort_order, face_detector_model)
     target_faces = detect_faces(target_image, score_threshold, sort_order, face_detector_model)
-    
+
     if not source_faces:
         # print("[LocalSwap] No faces detected in source image")
         return target_image
-    
+
     if not target_faces:
         # print("[LocalSwap] No faces detected in target image")
         return target_image
-    
+
     # Select source face
     source_face = source_faces[min(face_position, len(source_faces) - 1)]
     # print(f"[LocalSwap] Using source face at position {face_position}")
-    
-    # Get swapper
-    swapper = get_local_swapper(model_name)
-    
+
+    # Get swapper with device selection
+    swapper = get_local_swapper(model_name, device)
+
     # Get occluder and parser if specified
     occluder = None
     parser = None
@@ -81,16 +83,16 @@ def swap_faces_local(
         occluder = get_face_occluder(face_occluder_model)
     if face_parser_model and face_parser_model != 'none':
         parser = get_face_parser(face_parser_model)
-    
+
     # Swap faces - pass occluder and parser instances
     result = target_image.copy()
-    
+
     if face_selector_mode == 'many':
         # Swap all faces
         for i, target_face in enumerate(target_faces):
             # print(f"[LocalSwap] Swapping face {i+1}/{len(target_faces)}")
             result = swapper.swap_face(
-                source_face, target_face, result, pixel_boost, face_mask_blur, 
+                source_face, target_face, result, pixel_boost, face_mask_blur,
                 occluder, parser, source_image,
                 face_mask_types, face_mask_areas, face_mask_regions, face_mask_padding
             )
@@ -103,7 +105,7 @@ def swap_faces_local(
             occluder, parser, source_image,
             face_mask_types, face_mask_areas, face_mask_regions, face_mask_padding
         )
-    
+
     # print("[LocalSwap] Face swap completed")
     return result
 

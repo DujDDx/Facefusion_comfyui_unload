@@ -12,6 +12,7 @@ from onnx import numpy_helper
 from numpy.typing import NDArray
 
 from ..utils import VisionFrame, Face, get_model_path, ensure_model_exists, implode_pixel_boost, explode_pixel_boost
+from ..device_manager import DeviceManager, get_providers, get_provider_options
 from .constants import MODEL_URLS, MODEL_CONFIGS, WARP_TEMPLATES, FACE_MASK_AREA_SET, FACE_MASK_REGION_SET
 
 if TYPE_CHECKING:
@@ -22,8 +23,9 @@ if TYPE_CHECKING:
 class LocalFaceSwapper:
     """Local face swapping using ONNX models."""
 
-    def __init__(self, model_name: str = 'hyperswap_1c_256'):
+    def __init__(self, model_name: str = 'hyperswap_1c_256', device: str = 'auto'):
         self.model_name = model_name
+        self.device = device
         self.model_session = None
         self.embedding_converter_session = None
         self.model_initializer = None
@@ -95,25 +97,20 @@ class LocalFaceSwapper:
                     print(f"[LocalFaceSwapper] Error: Failed to download model")
                     return False
 
-            # Create ONNX session with CUDA memory optimization options
-            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            # Set device using device manager
+            DeviceManager.set_device(self.device)
 
-            # CUDA provider options for better memory management
-            cuda_provider_options = {
-                'device_id': 0,
-                'arena_extend_strategy': 'kNextPowerOfTwo',  # More efficient memory allocation
-                'gpu_mem_limit': 2 * 1024 * 1024 * 1024,  # 2GB limit (adjust as needed)
-                'cudnn_conv_algo_search': 'EXHAUSTIVE',  # Optimize convolution algorithms
-                'do_copy_in_default_stream': True,
-            }
+            # Get providers and options based on device
+            providers = get_providers(self.device)
+            provider_options, session_options = get_provider_options(self.device, memory_limit_gb=2.0)
 
-            session_options = ort.SessionOptions()
-            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            print(f"[LocalFaceSwapper] Using device: {self.device}")
+            print(f"[LocalFaceSwapper] Providers: {providers}")
 
             self.model_session = ort.InferenceSession(
                 model_path,
                 providers=providers,
-                provider_options=[cuda_provider_options, {}],  # CUDA options, CPU options
+                provider_options=provider_options,
                 sess_options=session_options
             )
 
@@ -136,7 +133,7 @@ class LocalFaceSwapper:
                         self.embedding_converter_session = ort.InferenceSession(
                             converter_path,
                             providers=providers,
-                            provider_options=[cuda_provider_options, {}],
+                            provider_options=provider_options,
                             sess_options=session_options
                         )
                         print(f"[LocalFaceSwapper] Loaded embedding converter: {converter_name}")
@@ -144,12 +141,11 @@ class LocalFaceSwapper:
                     self.embedding_converter_session = ort.InferenceSession(
                         converter_path,
                         providers=providers,
-                        provider_options=[cuda_provider_options, {}],
+                        provider_options=provider_options,
                         sess_options=session_options
                     )
                     print(f"[LocalFaceSwapper] Loaded embedding converter: {converter_name}")
 
-            # print(f"[LocalFaceSwapper] Model {self.model_name} loaded successfully")
             print(f"[LocalFaceSwapper] Running on: {self.model_session.get_providers()[0]}")
             return True
         except Exception as e:
@@ -656,23 +652,27 @@ class LocalFaceSwapper:
 
 # Global instance
 _swapper_instance = None
+_swapper_device = None
 
 
-def get_local_swapper(model_name: str = 'hyperswap_1c_256') -> LocalFaceSwapper:
+def get_local_swapper(model_name: str = 'hyperswap_1c_256', device: str = 'auto') -> LocalFaceSwapper:
     """Get or create local face swapper instance."""
-    global _swapper_instance
-    if _swapper_instance is None or _swapper_instance.model_name != model_name:
-        _swapper_instance = LocalFaceSwapper(model_name)
+    global _swapper_instance, _swapper_device
+    # Create new instance if model or device changed
+    if _swapper_instance is None or _swapper_instance.model_name != model_name or _swapper_device != device:
+        _swapper_instance = LocalFaceSwapper(model_name, device)
+        _swapper_device = device
     return _swapper_instance
 
 
 def unload_local_swapper():
     """Unload the global swapper instance to free GPU/CPU memory."""
-    global _swapper_instance
+    global _swapper_instance, _swapper_device
     if _swapper_instance is not None:
         _swapper_instance.unload()
         # Completely remove the instance so next call will create a fresh one
         _swapper_instance = None
+        _swapper_device = None
         print("[LocalFaceSwapper] Global instance removed")
 
     # Try to clear CUDA cache if available

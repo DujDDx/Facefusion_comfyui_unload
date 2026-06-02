@@ -47,6 +47,14 @@ class SwapFaceImage:
 						'default': 'scrfd'
 					}
 				),
+				'device':
+				(
+					['auto', 'cuda', 'cpu'],
+					{
+						'default': 'auto',
+						'tooltip': 'Device for inference: auto (detect best), cuda (GPU), cpu'
+					}
+				),
 				'unload_models':
 				(
 					'BOOLEAN',
@@ -62,7 +70,7 @@ class SwapFaceImage:
 	CATEGORY = 'FaceFusion API'
 
 	@staticmethod
-	def process(source_images : Tensor, target_image : Tensor, api_token : str, face_swapper_model : FaceSwapperModel, face_detector_model: str, unload_models: bool) -> Tuple[Tensor]:
+	def process(source_images : Tensor, target_image : Tensor, api_token : str, face_swapper_model : FaceSwapperModel, face_detector_model: str, device: str, unload_models: bool) -> Tuple[Tensor]:
 		# Smart batch processing - handle any input format
 		# Use first source image (or average multiple sources in future)
 		if source_images.dim() == 4 and source_images.shape[0] > 1:
@@ -77,13 +85,13 @@ class SwapFaceImage:
 			output_images = []
 			for i in range(target_image.shape[0]):
 				single_target = target_image[i:i+1]
-				swapped = SwapFaceImage.swap_face(source_image, single_target, api_token, face_swapper_model, '512x512', 0.3, face_detector_model=face_detector_model)
+				swapped = SwapFaceImage.swap_face(source_image, single_target, api_token, face_swapper_model, '512x512', 0.3, face_detector_model=face_detector_model, device=device)
 				output_images.append(swapped)
 			# Stack all results back into batch
 			output_tensor = torch.cat(output_images, dim=0)
 		else:
 			# Single image processing
-			output_tensor = SwapFaceImage.swap_face(source_image, target_image, api_token, face_swapper_model, '512x512', 0.3, face_detector_model=face_detector_model)
+			output_tensor = SwapFaceImage.swap_face(source_image, target_image, api_token, face_swapper_model, '512x512', 0.3, face_detector_model=face_detector_model, device=device)
 
 		# Unload models if requested
 		if unload_models:
@@ -93,7 +101,7 @@ class SwapFaceImage:
 		return (output_tensor,)
 
 	@staticmethod
-	def swap_face(source_tensor : Tensor, target_tensor : Tensor, api_token : str, face_swapper_model : FaceSwapperModel, pixel_boost: str = '512x512', face_mask_blur: float = 0.3, face_occluder_model: Optional[str] = None, face_parser_model: Optional[str] = None, face_selector_mode: str = 'one', face_position: int = 0, sort_order: str = 'large-small', score_threshold: float = 0.3, face_detector_model: str = 'scrfd', face_mask_types: Optional[list] = None, face_mask_areas: Optional[list] = None, face_mask_regions: Optional[list] = None, face_mask_padding: tuple = (0, 0, 0, 0)) -> Tensor:
+	def swap_face(source_tensor : Tensor, target_tensor : Tensor, api_token : str, face_swapper_model : FaceSwapperModel, pixel_boost: str = '512x512', face_mask_blur: float = 0.3, face_occluder_model: Optional[str] = None, face_parser_model: Optional[str] = None, face_selector_mode: str = 'one', face_position: int = 0, sort_order: str = 'large-small', score_threshold: float = 0.3, face_detector_model: str = 'scrfd', face_mask_types: Optional[list] = None, face_mask_areas: Optional[list] = None, face_mask_regions: Optional[list] = None, face_mask_padding: tuple = (0, 0, 0, 0), device: str = 'auto') -> Tensor:
 		# Check if using local inference
 		if api_token == '-1':
 			# print("[SwapFaceImage] Using local inference")
@@ -129,7 +137,8 @@ class SwapFaceImage:
 					face_mask_types=face_mask_types,
 					face_mask_areas=face_mask_areas,
 					face_mask_regions=face_mask_regions,
-					face_mask_padding=face_mask_padding
+					face_mask_padding=face_mask_padding,
+					device=device
 				)
 				
 				# Convert back to tensor
@@ -338,6 +347,14 @@ class AdvancedSwapFaceImage:
 						'multiline': False
 					}
 				),
+			'device':
+			(
+				['auto', 'cuda', 'cpu'],
+				{
+					'default': 'auto',
+					'tooltip': 'Device for inference: auto (detect best), cuda (GPU), cpu'
+				}
+			),
 			'unload_models':
 			(
 				'BOOLEAN',
@@ -388,6 +405,7 @@ class AdvancedSwapFaceImage:
 		face_mask_areas: str = 'upper-face,lower-face,mouth',
 		face_mask_regions: str = 'skin,nose,mouth,upper-lip,lower-lip',
 		face_mask_padding: str = '0,0,0,0',
+			device: str = 'auto',
 			unload_models: bool = False,
 			reference_image: Optional[Tensor] = None,
 			reference_face_distance: float = 0.6
