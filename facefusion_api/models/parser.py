@@ -27,6 +27,10 @@ class FaceParser:
             del self.model_session
             self.model_session = None
             print(f"[FaceParser] Unloaded model: {self.model_name}")
+
+        # Force garbage collection
+        import gc
+        gc.collect()
     
     def initialize(self) -> bool:
         """Initialize the parser model."""
@@ -147,10 +151,22 @@ def unload_face_parser(model_name: str = None):
         if model_name in _parser_instances:
             _parser_instances[model_name].unload()
             del _parser_instances[model_name]
+            print(f"[FaceParser] Removed instance for model: {model_name}")
     else:
-        for name, instance in _parser_instances.items():
-            instance.unload()
+        # Unload all instances
+        for name in list(_parser_instances.keys()):
+            _parser_instances[name].unload()
+            print(f"[FaceParser] Removed instance for model: {name}")
         _parser_instances.clear()
+        print("[FaceParser] All instances removed")
+
+    # Clear CUDA cache
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
 
 
 

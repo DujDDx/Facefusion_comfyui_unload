@@ -27,6 +27,10 @@ class FaceOccluder:
             del self.model_session
             self.model_session = None
             print(f"[FaceOccluder] Unloaded model: {self.model_name}")
+
+        # Force garbage collection
+        import gc
+        gc.collect()
     
     def initialize(self) -> bool:
         """Initialize the occluder model."""
@@ -111,10 +115,22 @@ def unload_face_occluder(model_name: str = None):
         if model_name in _occluder_instances:
             _occluder_instances[model_name].unload()
             del _occluder_instances[model_name]
+            print(f"[FaceOccluder] Removed instance for model: {model_name}")
     else:
-        for name, instance in _occluder_instances.items():
-            instance.unload()
+        # Unload all instances
+        for name in list(_occluder_instances.keys()):
+            _occluder_instances[name].unload()
+            print(f"[FaceOccluder] Removed instance for model: {name}")
         _occluder_instances.clear()
+        print("[FaceOccluder] All instances removed")
+
+    # Clear CUDA cache
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
 
 
 

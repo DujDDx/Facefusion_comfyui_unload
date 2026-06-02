@@ -44,6 +44,10 @@ class LocalFaceSwapper:
             print(f"[LocalFaceSwapper] Unloaded embedding converter")
 
         self.model_initializer = None
+
+        # Force garbage collection to ensure memory is freed
+        import gc
+        gc.collect()
         
     def initialize(self) -> bool:
         """Initialize the face swapper model and embedding converter if needed."""
@@ -609,5 +613,16 @@ def unload_local_swapper():
     global _swapper_instance
     if _swapper_instance is not None:
         _swapper_instance.unload()
+        # Completely remove the instance so next call will create a fresh one
         _swapper_instance = None
+        print("[LocalFaceSwapper] Global instance removed")
+
+    # Try to clear CUDA cache if available
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            print("[LocalFaceSwapper] CUDA cache cleared")
+    except Exception:
+        pass
 

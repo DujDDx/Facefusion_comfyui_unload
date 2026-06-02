@@ -269,27 +269,32 @@ def ensure_model_exists(model_name: str, download_url: Optional[str] = None, exp
 
 
 def unload_all_models():
-    """Unload all loaded models (swapper, occluder, parser) to free GPU/CPU memory."""
+    """Unload all loaded models (swapper, occluder, parser, detector) to free GPU/CPU memory."""
+    print("[Unload] Starting complete model unload...")
+
     from .models import unload_local_swapper, unload_face_occluder, unload_face_parser
     from .detection.detector import unload_face_detector
 
+    # Unload all models
     unload_local_swapper()
     unload_face_occluder()
     unload_face_parser()
     unload_face_detector()
 
-    # Force garbage collection to ensure memory is freed
+    # Force multiple rounds of garbage collection to ensure memory is freed
     import gc
-    gc.collect()
+    for _ in range(3):
+        gc.collect()
 
     # Try to clear CUDA cache if available
     try:
         import torch
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            print("[Unload] CUDA cache cleared")
+            torch.cuda.synchronize()
+            print("[Unload] CUDA cache cleared and synchronized")
     except Exception:
         pass
 
-    print("[Unload] All models unloaded, memory freed")
+    print("[Unload] All models completely unloaded, memory freed")
 

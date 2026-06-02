@@ -46,6 +46,10 @@ class FaceDetector:
             del self.recognition_session
             self.recognition_session = None
             print(f"[FaceDetector] Unloaded recognition model: {self.recognition_model_name}")
+
+        # Force garbage collection
+        import gc
+        gc.collect()
         
     def initialize(self) -> bool:
         """Initialize the detector and recognition models."""
@@ -568,7 +572,19 @@ def unload_face_detector(detector_model: str = None):
         if actual_model in _detector_instances:
             _detector_instances[actual_model].unload()
             del _detector_instances[actual_model]
+            print(f"[FaceDetector] Removed instance for model: {actual_model}")
     else:
-        for name, instance in _detector_instances.items():
-            instance.unload()
+        # Unload all instances
+        for name in list(_detector_instances.keys()):
+            _detector_instances[name].unload()
+            print(f"[FaceDetector] Removed instance for model: {name}")
         _detector_instances.clear()
+        print("[FaceDetector] All instances removed")
+
+    # Clear CUDA cache
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
